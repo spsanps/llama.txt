@@ -1,0 +1,24 @@
+/* Light theme specific styles */
+body.light-theme {
+    background-color: #fff;
+    color: #212529;
+}
+
+body.light-theme .navbar-custom {
+    background-color: #f8f9fa;
+    border-color: #e2e2e2;
+}
+
+body.light-theme .btn-custom {
+    color: #5a5a5a;
+    background-color: transparent;
+}
+
+body.light-theme .editor, .section {
+    background-color: #fff;
+    color: #212529;
+}
+
+body.light-theme .section-card.active, .btn-custom:active {
+    background-color: #e7e7e7;
+}
