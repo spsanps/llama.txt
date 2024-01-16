@@ -28,3 +28,7 @@ body.light-theme .editor, .section {
 body.light-theme .section-card.active, .btn-custom:active {
     background-color: #e7e7e7;
 }
+
+.body-light-theme .faded {
+    color: rgba(0, 0, 0, 0.5);
+}

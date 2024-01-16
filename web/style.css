@@ -93,7 +93,8 @@ body {
     border-radius: 10px;
     box-shadow: 0 0 10px rgba(100, 99, 99, 0.1);
     padding: 20px;
-    max-width: 795px;
+    /*max-width: 795px;*/
+    width: 100%;
     /* Max width */
     margin: auto;
     height: 100%;
@@ -166,6 +167,11 @@ body {
 .section-card.active {
     background-color: #e8e8e8; /* Highlight color for active card */
 }
+
+.faded {
+    color: rgba(0, 0, 0, 0.5); /* Adjust the color and opacity as needed */
+    font-style: italic;
+  }
 
 /* Add more styling as needed */
 

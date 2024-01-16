@@ -82,4 +82,11 @@ Temporary Items
 
 # Misc
 sample.txt
-building_front/
+*building_front*
+*scratch_pad*
+scratch_pad/
+
+
+# Ignore build and node_modules folders
+*build*
+*node_modules*

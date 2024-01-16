@@ -53,3 +53,7 @@ body.dark-theme .section-card.active, .btn-custom:active {
 body.dark-theme .section-title {
     color: #d1d1d1;
 }
+
+.body-dark-theme .faded {
+    color: rgba(255, 255, 255, 0.5);
+}
