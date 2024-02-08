@@ -1,250 +1,6 @@
 // No need to require 'electron', use the exposed electronAPI from preload.js
 
-// 
-// -------------------------------- Quill -------------------------------- //
-var quill; // Declare it globally
-let randomTextLength = 0; // Track length of the random text
-let randomTextStart = 0; // Track the start position of the random text
-
-let currentSuggestionLength = 10; // Track length of the current suggestion
-
-document.addEventListener('DOMContentLoaded', function () {
-  quill = new Quill('#textEditor', {
-    modules: { toolbar: '#toolbar' },
-    theme: 'snow'
-  });
-
-  quill.on('text-change', function (delta, oldDelta, source) {
-    if (source === 'user') {
-      // if the last editor activity was a tab, remove it
-      // use delta.ops to check if the last operation was a tab
-      console.log(delta.ops);
-      if (delta.ops[delta.ops.length - 1].insert === '\t') {
-        quill.deleteText(quill.getLength() - 1 - currentSuggestionLength, 1);
-      }
-      else {
-        replaceRandomText();
-      }
-    }
-  });
-
-  // Listen for the Tab keydown event
-  quill.root.addEventListener('keydown', function (event) {
-    if (event.key === 'Tab') {
-      // Prevent the default tab behaviour
-      event.preventDefault();
-
-      // Convert the random text to regular text
-      convertRandomTextToRegular();
-    }
-  }
-  );
-});
-
-function replaceRandomText() {
-  const randomText = generateRandomString(10);
-  const currentText = quill.getText();
-  randomTextStart = currentText.length - 1 - randomTextLength;
-
-  // Delete the previous random text
-  // -1 for tab character
-  quill.deleteText(randomTextStart, randomTextLength);
-
-  // Insert new random text
-  quill.insertText(randomTextStart, randomText + " ...", { color: 'rgba(0, 0, 0, 0.5)', italic: true });
-  randomTextLength = randomText.length + 4; // Update length (+4 accounts for additional characters added)
-}
-
-function convertRandomTextToRegular() {
-  const currentText = quill.slice(randomTextStart, randomTextStart + randomTextLength);
-  // convert to regular text
-  // ie remove italic and color
-  console.log(randomText);
-
-
-  // Replace the random text with regular text
-  quill.deleteText(randomTextStart, randomTextLength);
-  quill.insertText(randomTextStart, randomText, 'user');
-  quill.removeFormat(randomTextStart, randomTextLength);
-  randomTextLength = 0; // Reset the random text length
-}
-
-function generateRandomString(length) {
-  let result = '';
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  const charactersLength = characters.length;
-
-  for (let i = 0; i < length; i++) {
-    result += characters.charAt(Math.floor(Math.random() * charactersLength));
-  }
-
-  return result;
-}
-
-// ------------------------------ Autocomplete ------------------------------ //
-
-// llama.txt autocomplete interface
-let suggestionLengthMax = 0; // Track length of the current suggestion
-let suggestionContextLengthMax = 100; // Number of words to include in the context
-let suggestionContextLengthMin = 10; // Context should be refreshed when the number of words in the editor is less than this
-// Track approximately number of words in the cache, in LLMs it's actually number of tokens but we will make do with words
-let suggestionContextInCache = "";
-let currentSuggestion = ""; // Track the current suggestion
-
-// helper functions to count words
-function countWords(str) {
-  return str.trim().split(/\s+/).length;
-}
-
-// helper function to get the last n words
-// but exactly as they are in the string
-// ie. "this     is a string" with n = 4
-// should return "this     is a string"
-// and not "this is a string"
-function getLastNWords(str, n) {
-  // Regular expression to match the last n words
-  const regex = new RegExp(`(?:\\s*\\S+){0,${n}}$`);
-
-  // Apply the regex and return the match
-  const match = str.match(regex);
-  return match ? match[0] : '';
-}
-// when not active, request suggestions from the main process
-// request suggestions from the main process
-function requestSuggestions() {
-  // Send the last n words to the main process
-  window.electronAPI.requestSuggestions(lastNWords);
-}
-
-function checkContextisCorrect() {
-  // Get the last n words from the editor
-  // first we will get a string of 10*(n words) characters
-  // then we will get the last n words from that string
-  // if quill exists
-  if (quill) {
-    characterRequest = quill.getText(quill.getLength() - 10 * suggestionContextLength, 10 * suggestionContextLength);
-    lastNWords = getLastNWords(characterRequest, suggestionContextLength);
-    // give suggestions only if the context is correct
-    if (lastNWords === suggestionContextInCache) {
-      return true;
-    }
-  }
-  return false;
-}
-
-// length of matching context
-// Like above but instead of true or false, returns the length of the matching context
-// this time words are not needed
-function getMatchingContextLength() {
-  // Get the last n words from the editor
-  // first we will get a string of 10*(n words) characters
-  // no words are needed
-  if (quill) {
-    sliceLength = 10 * suggestionContextLength; // approximate length of the slice estimated from the number of words
-
-    characterRequest = quill.getText(quill.getLength() - sliceLength, sliceLength);
-    // count backwards from the end of the string
-    // until we find a mismatch
-    // then return the number of characters from the end
-    // ie. the length of the matching context
-    let count = 0;
-    for (let i = sliceLength - 1; i >= 0; i--) {
-      if (characterRequest[i] !== suggestionContextInCache[i]) {
-        break;
-      }
-      count++;
-    }
-    return count;
-  }
-  return 0;
-}
-// function to handle incoming suggestions
-function handleSuggestion(suggestion) {
-  // should update suggestionContext
-  currentSuggestion = suggestion;
-}
-
-function getFirstWord(str) {
-  // this will include space before and after the word
-  // need to include both
-  let i = 0;
-  // run till first non-space character
-  // space includes \n \t \r etc
-  // use regex to match space
-  // not implemented
-  throw new Error("Not implemented");
-}
-
-
-// function to handle accepting a word
-// should call the ui update function
-// also should update the suggestionContext
-function acceptFirstWordUi() {
-  // get the first word from the suggestion
-  // and insert it into the editor
-  // then update the suggestion context
-  // and update the suggestion length
-  const firstWord = null; // implement this
-  throw new Error("Not implemented");
-}
-
-// function to handle accepting a word
-function acceptFirstWord() {
-
-  // add check somewhere to see if suggestion is empty
-  // Documentation: 
-  // move one word from suggestion to context
-  // remove the first word from the suggestion
-  // add the first word to the end of the context
-  // remove the first word from context
-  // update currentSuggestionLength
-  // update currentSuggestion by 
-  // acceptFirstWordUi();
-  // update accepted words (call the main process)
-  // update
-  // -----------------------------------------//
-  // Code:
-  throw new Error("Not implemented");
-}
-
-function acceptEntireSuggestion() {
-  throw new Error("Not implemented");
-}
-
-// get a new suggestion
-// update the suggestion and length
-
-function updateSuggestion(suggest) {
-  // update UI
-  // update suggestion
-  // update suggestion length
-  throw new Error("Not implemented");
-}
-
-// updates when cursor is moved
-// need to request context update
-// if within a certain range
-// we can update context accordingly
-// we will not implement that for now
-// let's just request context update fully
-function onCursorMove() {
-  // request context update
-  // call the main process
-  throw new Error("Not implemented");
-}
-
-// backspace handler
-function backSpaceContextUpdate() {
-  // if the last character is a back space
-  // request context update
-  // call the main process
-  throw new Error("Not implemented");
-}
-
-
-
-
-  
+let editor = document.getElementById('textEditor');
 
 // ------------------------------ Dark Mode ------------------------------ //
 let isDarkMode = false;
@@ -288,17 +44,22 @@ document.getElementById('saveButton').addEventListener('click', () => {
 
 // Get editor content
 window.electronAPI.getEditorContent((event) => {
-  const content = quill.getText();
+  // get from id="textEditor"
+  // const editor = document.getElementById('textEditor');
+  const content = editor.innerText;
+
   window.electronAPI.responseGetEditorContent(content);
 });
 
 // Update editor content
 window.electronAPI.updateEditorContent((event, content) => {
-  quill.setText(content);
+  // write to id="textEditor"
+  // const editor = document.getElementById('textEditor');
+  editor.innerText = content;
 });
 
 // Whenever the editor content changes, update the lastEditorActivity
-document.getElementById('textEditor').addEventListener('input', () => {
+editor.addEventListener('input', () => {
   lastEditorActivity = Date.now();
   // write to id="lastEditorActivity"
   const lastEditorActivityElement = document.getElementById('lastEditorActivity');
@@ -343,4 +104,234 @@ window.electronAPI.updateFileList((event, fileNames) => {
     fileListElement.appendChild(cardBody);
   });
 });
+
+// ------------------------------ Autocomplete ------------------------------ //
+// llama.txt autocomplete interface
+
+
+let debounceTimer;
+let debounceTime = 500;
+let completionURL = "http://127.0.0.1:8080/completion";
+let currentSuggestion = "";
+let contextLengthChar = 10000;
+
+function createSuggestionSpan(suggestion) {
+  const span = document.createElement('span');
+  span.className = 'suggestion';
+  span.id = 'suggestion';
+  span.textContent = suggestion;
+  // contentEditable is set to false to prevent the span from being edited
+  span.contentEditable = false;
+  return span;
+}
+
+function insertTextAtCursor(text) {
+  const sel = window.getSelection();
+  if (sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents(); // Delete any selected text
+    range.insertNode(document.createTextNode(text));
+    range.collapse(false); // Move the cursor to the end of the inserted text
+  }
+}
+
+function insertSuggestionNodeAtCursor(node) {
+  const sel = window.getSelection();
+
+  if (sel.rangeCount > 0) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents(); // Delete any selected text
+    range.insertNode(node);
+
+    // To leave the cursor at the beginning of the inserted node, set the start (and end) of the range before the node
+    range.setStartBefore(node);
+    range.collapse(true); // Collapse the range to the start to move the cursor
+
+    sel.removeAllRanges(); // Clear the selection
+    sel.addRange(range); // Add the new range to move the cursor
+  }
+}
+
+function generateRandomString(length) {
+  // created for testing purposes
+  let result = '';
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
+  const charactersLength = characters.length;
+
+  for (let i = 0; i < length; i++) {
+    result += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+
+  return result;
+}
+
+// Function to extract n characters leading up to the cursor position
+function getNCharsBeforeCursor(n) {
+  // const editor = document.getElementById('textEditor');
+  let textUpToCursor = "";
+
+  // Get the user's selection
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0) {
+    // Get the range within the editor
+    const range = selection.getRangeAt(0).cloneRange();
+    if (range.commonAncestorContainer.parentNode === editor || range.commonAncestorContainer === editor) {
+      // Set the range start to 0 or the difference between current position and n, whichever is greater
+      const start = Math.max(range.startOffset - n, 0);
+      range.setStart(range.startContainer, start);
+      // Extract the text from the range
+      textUpToCursor = range.toString().slice(-n);
+    }
+  }
+
+  return textUpToCursor;
+}
+
+async function pingCompletionServer(promptText) {
+
+  console.log("promptText", promptText);
+
+  const data = {
+    prompt: promptText
+  };
+
+  try {
+    const response = await fetch(completionURL, {
+      method: "POST", // Specify the request method
+      headers: {
+        "Content-Type": "application/json" // Specify the content type in the headers
+      },
+      body: JSON.stringify(data) // Convert the JavaScript object to a JSON string
+    });
+
+    if (!response.ok) {
+      // Check if the response status code is not OK (200-299)
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
+    const responseData = await response.json(); // Parse the JSON response body
+    // console.log(responseData); // Log the response data to the console
+    console.log("currentSuggestion", responseData);
+
+    currentSuggestion = responseData.suggested;
+
+  } catch (error) {
+    console.error("Error:", error); // Log any errors to the console
+    currentSuggestion = "";
+  }
+}
+
+function updateSuggestionContent(newSuggestion) {
+  // we will change the context inside the id="suggest" span if it exists
+  // we will ensure the cursor is not moved
+
+  const suggestion = document.getElementById('suggestion');
+  if (suggestion) {
+    suggestion.textContent = newSuggestion;
+  }
+}
+
+async function updateSuggestion() {
+  const context = getNCharsBeforeCursor(contextLengthChar);
+  if (context.length > 0) {
+    await pingCompletionServer(context);
+
+    updateSuggestionContent(currentSuggestion);
+  }
+}
+
+
+function deleteSuggestion() {
+  const suggestion = document.getElementById('suggestion');
+  if (suggestion) {
+    suggestion.remove();
+  }
+}
+
+function insertSuggestion() {
+  const suggestionElement = createSuggestionSpan(currentSuggestion);
+  insertSuggestionNodeAtCursor(suggestionElement);
+}
+
+// add event listener to the editor div for any kind of change
+editor.addEventListener('input', function (event) {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    deleteSuggestion();
+
+    insertSuggestion();
+    updateSuggestion();
+  }, debounceTime); // Adjust debounce time as needed
+});
+
+// add event listener to the editor div for cursor movement
+editor.addEventListener('click', function (event) {
+  // first ensure selection is not inside the suggestion span
+  // if it is move it out (left of the span)
+  // moveCursorOutsideSuggestionToLeft();
+
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    deleteSuggestion();
+    insertSuggestion();
+    updateSuggestion();
+  }, 500); // Adjust debounce time as needed
+});
+
+// accept suggestion on Tab key press
+editor.addEventListener('keydown', function (event) {
+
+  // moveCursorOutsideSuggestionToLeft();
+
+  if (event.key === 'Tab') {
+    event.preventDefault(); // Prevent the default tab behavior
+
+    const suggestionElement = document.getElementById('suggestion');
+    if (suggestionElement) {
+      const suggestionText = suggestionElement.textContent;
+      // Remove the suggestion element from the DOM
+      suggestionElement.remove();
+
+      if (event.shiftKey) {
+        // Shift+Tab: Insert only the first "word" as per the defined pattern
+        console.log("Shift+Tab");
+        const match = suggestionText.match(/(^\s*\S+)/);
+
+        if (match) {
+          const firstWord = match[1]; // Extract the first word
+          // console.log("firstWord", firstWord);
+          const restOfSuggestion = suggestionText.substring(firstWord.length);
+
+          insertTextAtCursor(firstWord); // Insert the first word and a space
+
+          // If there's text remaining, recreate the suggestion span for it
+          if (restOfSuggestion.trim().length > 0) {
+            const newSuggestionElement = createSuggestionSpan(restOfSuggestion);
+            insertSuggestionNodeAtCursor(newSuggestionElement);
+          }
+        }
+
+      } else {
+        // Tab: Integrate the entire suggestion and place the cursor at the end
+        insertTextAtCursor(suggestionText);
+      }
+      updateSuggestion();
+    }
+  }
+});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 

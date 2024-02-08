@@ -173,5 +173,10 @@ body {
     font-style: italic;
   }
 
-/* Add more styling as needed */
+/* Suggestion text styles */
+.suggestion {
+    color: #8b8b8b7d; /* Blue color for suggestions */
+    transition: color 0.2s; /* Smooth transition for text color */
+}
+
 
