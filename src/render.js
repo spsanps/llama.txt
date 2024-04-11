@@ -109,7 +109,8 @@ window.electronAPI.updateFileList((event, fileNames) => {
 // llama.txt autocomplete interface
 
 
-let debounceTimer;
+let debounceTimerChangeInEditor;
+let debounceTimerPingServer;
 let debounceTime = 500;
 let completionURL = "http://127.0.0.1:8080/completion";
 let currentSuggestion = "";
@@ -152,7 +153,7 @@ function insertSuggestionNodeAtCursor(node) {
   }
 }
 
-function generateRandomString(length) {
+/* function generateRandomString(length) {
   // created for testing purposes
   let result = '';
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 ';
@@ -163,7 +164,7 @@ function generateRandomString(length) {
   }
 
   return result;
-}
+} */
 
 // Function to extract n characters leading up to the cursor position
 function getNCharsBeforeCursor(n) {
@@ -231,14 +232,25 @@ function updateSuggestionContent(newSuggestion) {
   }
 }
 
-async function updateSuggestion() {
+async function updateSuggestionFromServer() {
   const context = getNCharsBeforeCursor(contextLengthChar);
   if (context.length > 0) {
     await pingCompletionServer(context);
 
-    updateSuggestionContent(currentSuggestion);
+    // updateSuggestionContent(currentSuggestion);
   }
 }
+
+// debounce version of the function
+
+async function updateSuggestionFromServerDebounced() {
+  // put the entire function in a debounce
+  clearTimeout(debounceTimerPingServer);
+  debounceTimerPingServer = setTimeout(() => {
+    updateSuggestionFromServer();
+  }, debounceTime);
+}
+
 
 
 function deleteSuggestion() {
@@ -255,12 +267,11 @@ function insertSuggestion() {
 
 // add event listener to the editor div for any kind of change
 editor.addEventListener('input', function (event) {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
+  clearTimeout(debounceTimerChangeInEditor);
+  debounceTimerChangeInEditor = setTimeout(() => {
     deleteSuggestion();
-
+    updateSuggestionFromServerDebounced();
     insertSuggestion();
-    updateSuggestion();
   }, debounceTime); // Adjust debounce time as needed
 });
 
@@ -270,13 +281,14 @@ editor.addEventListener('click', function (event) {
   // if it is move it out (left of the span)
   // moveCursorOutsideSuggestionToLeft();
 
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
+  clearTimeout(debounceTimerChangeInEditor);
+  debounceTimerChangeInEditor = setTimeout(() => {
     deleteSuggestion();
+    updateSuggestionFromServerDebounced();
     insertSuggestion();
-    updateSuggestion();
-  }, 500); // Adjust debounce time as needed
+  }, debounceTime); // Adjust debounce time as needed
 });
+
 
 // accept suggestion on Tab key press
 editor.addEventListener('keydown', function (event) {
@@ -315,10 +327,17 @@ editor.addEventListener('keydown', function (event) {
         // Tab: Integrate the entire suggestion and place the cursor at the end
         insertTextAtCursor(suggestionText);
       }
-      updateSuggestion();
+      updateSuggestionFromServer();
     }
   }
 });
+
+// loop to check for new suggestions
+
+setInterval(() => {
+  updateSuggestionFromServerDebounced();
+  updateSuggestionContent(currentSuggestion);
+}, 1000);
 
 
 
