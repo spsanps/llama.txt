@@ -30,8 +30,23 @@
       outline: none;
     }
 
+    /*chapter-content to have pre-wrap to maintain line breaks*/
+    #chapter-content {
+      white-space: pre-wrap;
+    }
+
     .suggestion {
       color: #6b7280;
+      user-select: none;
+      /* standard syntax */
+      -webkit-user-select: none;
+      /* webkit (safari, chrome) browsers */
+      -moz-user-select: none;
+      /* mozilla browsers */
+      -ms-user-select: none;
+      /* internet explorer */
+      pointer-events: none;
+      /* Prevent mouse events */
     }
 
     .highlight {
@@ -109,6 +124,80 @@
     .wikipedia-text p {
       margin-bottom: 1rem;
     }
+
+    .llama-loading {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
+
+    .llama-loading-bar {
+      width: 100%;
+      height: 10px;
+      background-color: #e5e7eb;
+      border-radius: 5px;
+      margin-bottom: 8px;
+      position: relative;
+    }
+
+    .llama-loading-bar-fill {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background-color: #3b82f6;
+      border-radius: 5px;
+      transition: width 0.3s;
+    }
+
+    .colored-dots {
+      display: flex;
+      justify-content: margin-bottom: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin: 0 4px;
+      background-color: #e5e7eb;
+    }
+
+    .dot.active {
+      background-color: #10b981;
+    }
+
+    .loading-bar-label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-left: 8px;
+    }
+
+    .colored-dots {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 8px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin: 0 4px;
+      background-color: #e5e7eb;
+    }
+
+    .dot.active {
+      background-color: #10b981;
+    }
+
+    .loading-bar-label {
+      font-size: 12px;
+      color: #6b7280;
+      margin-left: 8px;
+    }
   </style>
 </head>
 
@@ -130,12 +219,11 @@
         </div>
       </div>
       <div class="w-4/12 pl-8 pr-2">
-        <div class="flex mb-4">
-          <div class="tab active" data-tab="notes">Notes</div>
-          <div class="tab" data-tab="llama">llama.txt</div>
-          <div class="relative inline-block text-left ml-auto">
+        <div class="flex mb-4 justify-end">
+          <button id="reset-data" class="button text-sm mr-4">Reset</button>
+          <div class="relative inline-block text-left">
             <div>
-              <button type="button" class="button text-sm ml-2" id="export-menu-button">
+              <button type="button" class="button text-sm" id="export-menu-button">
                 Export
               </button>
             </div>
@@ -152,12 +240,37 @@
               </div>
             </div>
           </div>
-          <div><button id="reset-data" class="button text-sm ml-4">Reset</button></div>
+        </div>
+        <div class="flex">
+          <div class="tab active" data-tab="notes">Notes</div>
+          <div class="tab" data-tab="llama">llama.txt</div>
         </div>
         <div id="tab-content">
           <div id="notes" class="notes text-sm text-gray-700 mb-4" contenteditable="true" placeholder="Add notes...">
           </div>
-          <div id="llama" class="notes text-sm text-gray-700 mb-4 hidden">llama.txt content goes here</div>
+          <div id="llama" class="notes text-sm text-gray-700 mb-4 hidden">
+            <div class="llama-loading">
+              <div class="colored-dots">
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+                <div class="dot"></div>
+              </div>
+              <div class="loading-bar-container">
+                <span class="loading-bar-label">Decoded:</span>
+                <div class="llama-loading-bar">
+                  <div id="n-decoded-bar" class="llama-loading-bar-fill"></div>
+                </div>
+              </div>
+              <div class="loading-bar-container">
+                <span class="loading-bar-label">Suggested:</span>
+                <div class="llama-loading-bar">
+                  <div id="n-suggested-bar" class="llama-loading-bar-fill"></div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -177,6 +290,9 @@
     const tabs = document.querySelectorAll('.tab');
     const tabContent = document.getElementById('tab-content');
 
+    const nDecodedBar = document.getElementById('n-decoded-bar');
+    const nSuggestedBar = document.getElementById('n-suggested-bar');
+
     let chapters = [];
     let currentChapter = null;
 
@@ -185,14 +301,30 @@
     const contextLengthChar = 1000;
 
     let currentSuggestion = "";
+    let currentContext = "";
+
+    let serverResponding = true;
+    let lastServerPingTime = 0;
+    let currentServerRetryTime = 1000;
+    let maxServerRetryTime = 60000;
+
     let debounceTimerChangeInEditor;
     let debounceTimerPingServer;
+
+    function convertToHtml(text) {
+      return text.replace(/\n/g, '<br>');
+    }
+
+    function convertToText(html) {
+      return html.replace(/<br>/g, '\n');
+    }
+
 
     function createChapter() {
       const chapter = {
         id: Date.now(),
         title: 'Untitled',
-        content: '',
+        content: '<br>',
       };
       chapters.push(chapter);
       renderChapterList();
@@ -202,31 +334,47 @@
 
     function renderChapterList() {
       chapterList.innerHTML = chapters.map(chapter => `
-      <li>
+      <li class="flex justify-between">
         <a href="#" data-id="${chapter.id}" class="text-gray-600 hover:text-black">${chapter.title}</a>
+        <button class="text-red-600 hover:text-red-800 ml-2 delete-chapter" data-id="${chapter.id}">×</button>
       </li>
     `).join('');
     }
 
     function selectChapter(chapterId) {
+      if (currentChapter) {
+        currentChapter.content = chapterContent.innerHTML;
+      }
       currentChapter = chapters.find(chapter => chapter.id === chapterId);
       chapterTitle.value = currentChapter.title;
       chapterContent.innerHTML = currentChapter.content;
-      highlightText();
     }
 
     function updateChapter() {
       if (currentChapter) {
         currentChapter.title = chapterTitle.value;
         currentChapter.content = chapterContent.innerHTML;
-        saveChapters();
         renderChapterList();
+        saveChapters();
       }
+    }
+
+    function deleteChapter(chapterId) {
+      chapters = chapters.filter(chapter => chapter.id !== chapterId);
+      renderChapterList();
+      if (chapters.length > 0) {
+        selectChapter(chapters[0].id);
+      } else {
+        currentChapter = null;
+        chapterTitle.value = '';
+        chapterContent.innerHTML = '';
+      }
+      saveChapters();
     }
 
     function saveChapters() {
       localStorage.setItem('chapters', JSON.stringify(chapters));
-      localStorage.setItem('notes', notes.innerHTML);
+      localStorage.setItem('notes', convertToText(notes.innerHTML));
     }
 
     function loadChapters() {
@@ -238,12 +386,13 @@
           selectChapter(chapters[0].id);
         }
       }
-      notes.innerHTML = localStorage.getItem('notes') || '';
+      notes.innerHTML = convertToHtml(localStorage.getItem('notes') || '');
     }
 
     function exportAsText() {
-      const text = chapters.map(chapter => `${chapter.title}\n\n${chapter.content}\n\n`).join('') +
-        `\nNotes:\n${notes.innerText}`;
+      const text = chapters.map(chapter => `${chapter.title}\n\n${convertToText(chapterContent.innerHTML)
+        }\n\n`).join('') +
+        `\nNotes:\n${convertToText(notes.innerHTML)}`;
       const blob = new Blob([text], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -258,10 +407,10 @@
       chapters.forEach(chapter => {
         doc.text(chapter.title, 10, y);
         y += 10;
-        doc.text(chapter.content, 10, y);
+        doc.text(convertToText(chapterContent.innerHTML), 10, y);
         y += 10;
       });
-      doc.text(`Notes: ${notes.innerText}`, 10, y);
+      doc.text(`Notes: ${convertToText(notes.innerHTML)}`, 10, y);
       doc.save('book.pdf');
     }
 
@@ -290,9 +439,57 @@
     function createSuggestionSpan(suggestion) {
       const span = document.createElement('span');
       span.className = 'suggestion';
-      span.textContent = suggestion;
+      span.innerHTML = convertToHtml(suggestion);
       span.contentEditable = false;
       return span;
+    }
+
+    function insertSuggestionAtCursor(span) {
+      const selection = window.getSelection();
+      if (selection.rangeCount < 1) {
+        return;
+      }
+      const range = selection.getRangeAt(0);
+      const originalStartNode = range.startContainer;
+      const originalStartOffset = range.startOffset;
+      const originalEndNode = range.endContainer;
+      const originalEndOffset = range.endOffset;
+
+      // Helper function to check if the current selection is inside the desired div
+      function isInsideTargetDiv(node, targetId) {
+        while (node) {
+          if (node.id === targetId) {
+            return true;
+          }
+          node = node.parentNode;
+        }
+        return false;
+      }
+
+      // Check if we are inside the 'chapter-content' div
+      if (!isInsideTargetDiv(originalStartNode, 'chapter-content')) {
+        console.log('Not inside the chapter-content div.');
+        return;
+      }
+
+      // Insert the suggestion span after the current selection
+      range.collapse(false);
+      range.insertNode(span);
+
+      // Restore the original selection
+      range.setStart(originalStartNode, originalStartOffset);
+      range.setEnd(originalEndNode, originalEndOffset);
+
+      // Remove any additional ranges to keep only one selection active
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    function deleteSuggestionSpan() {
+      const suggestionElement = document.querySelector('.suggestion');
+      if (suggestionElement) {
+        suggestionElement.remove();
+      }
     }
 
     function insertTextAtCursor(text) {
@@ -300,37 +497,58 @@
       if (selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         range.deleteContents();
-        range.insertNode(document.createTextNode(text));
-      }
-    }
-    function insertSuggestionNodeAtCursor(node) {
-      const selection = window.getSelection();
-      if (selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        range.insertNode(node);
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.setEndAfter(textNode);
         selection.removeAllRanges();
         selection.addRange(range);
       }
     }
 
-
-
     function getNCharsBeforeCursor(n) {
       const selection = window.getSelection();
-      if (selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0).cloneRange();
-        if (range.commonAncestorContainer.parentNode === chapterContent || range.commonAncestorContainer === chapterContent) {
-          const start = Math.max(range.startOffset - n, 0);
-          range.setStart(range.startContainer, start);
-          return range.toString().slice(-n);
-        }
+
+      // Return an empty string if there is no selection or cursor within the div
+      if (!selection.rangeCount || !chapterContent.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+        console.log("No selection or cursor in the content div");
+        return "";
       }
-      return '';
+
+      const range = selection.getRangeAt(0);
+      const startContainer = range.startContainer;
+      const startOffset = range.startOffset;
+
+      // Create a range to clone and manipulate
+      const rangeToStart = range.cloneRange();
+      rangeToStart.collapse(true); // Collapse the range to the start point of the selection
+      rangeToStart.setStart(chapterContent, 0); // Set the start to the beginning of the contentDiv
+
+      // Extract the text within this range
+      let textUpToCursor = rangeToStart.toString();
+
+      // Replace <br> and other HTML elements with \n where appropriate by re-creating the range as an HTML fragment
+      rangeToStart.setEnd(startContainer, startOffset);
+      const container = document.createElement("div");
+      container.appendChild(rangeToStart.cloneContents());
+
+      // Convert HTML to text, handling line breaks
+      textUpToCursor = container.innerHTML
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/div>/gi, "\n")
+        .replace(/<div>/gi, "")
+        .replace(/<[^>]+>/g, ""); // Remove any remaining HTML tags
+
+      // Get up to 'n' characters before the cursor
+      if (textUpToCursor.length > n) {
+        textUpToCursor = textUpToCursor.substring(textUpToCursor.length - n);
+      }
+      console.log("Context:", textUpToCursor);
+      return textUpToCursor;
     }
 
     async function pingCompletionServer(promptText) {
       try {
-        console.log("Sending request to server with prompt:", promptText);
         const response = await fetch(completionURL, {
           method: "POST",
           headers: {
@@ -339,108 +557,155 @@
           body: JSON.stringify({ prompt: promptText })
         });
 
-        if (!response.ok) {
-          throw new Error(`Request failed with status ${response.status}`);
+        if (response.ok) {
+          const responseData = await response.json();
+          currentSuggestion = responseData.suggested;
+          updateLoadingBars(
+            responseData.n_suggested,
+            responseData.n_decoded,
+            responseData.max_decoded,
+            responseData.max_suggested,
+            responseData.state
+          );
+          return true;
         }
-
-        const responseData = await response.json();
-        console.log("Received response from server:", responseData);
-        currentSuggestion = responseData.suggested;
       } catch (error) {
-        console.error("Error:", error);
+        console.error("Unable to ping the completion server:", error);
         currentSuggestion = "";
+        updateLoadingBars(0, 0, 0, 0, 0);
+        return false;
+      }
+    }
+    async function pingCompletionServerWithRetry(promptText) {
+      if (promptText.length < 1) {
+        currentSuggestion = '';
+        return;
+      }
+      // Check if the server is responding
+      if (!serverResponding) {
+        const currentTime = Date.now();
+        if (currentTime - lastServerPingTime > currentServerRetryTime) {
+          currentServerRetryTime = Math.min(currentServerRetryTime * 2, maxServerRetryTime);
+          console.log("Retrying server ping after", currentServerRetryTime, "ms");
+          lastServerPingTime = currentTime;
+          if (await pingCompletionServer(promptText)) {
+            serverResponding = true;
+            currentServerRetryTime = 1000;
+          }
+        } else {
+          serverResponding = false;
+          currentSuggestion = "";
+        }
+      }
+      else {
+        if (!await pingCompletionServer(promptText)) {
+          serverResponding = false;
+          currentSuggestion = "";
+        }
       }
     }
 
-    function updateSuggestionContent(newSuggestion) {
-      console.log("Updating suggestion content with:", newSuggestion);
-      const suggestion = document.querySelector('.suggestion');
-      if (suggestion) {
-        suggestion.textContent = newSuggestion;
-      } else {
-        const suggestionElement = createSuggestionSpan(newSuggestion);
-        insertSuggestionNodeAtCursor(suggestionElement);
-      }
-    }
 
-    async function updateSuggestionFromServer() {
-      const context = getNCharsBeforeCursor(contextLengthChar);
-      console.log("Context before cursor:", context);
-      if (context) {
-        await pingCompletionServer(context);
-        updateSuggestionContent(currentSuggestion);
-      }
-    }
-
-    function updateSuggestionFromServerDebounced() {
+    function pingCompletionServerDebounced(promptText) {
       clearTimeout(debounceTimerPingServer);
-      debounceTimerPingServer = setTimeout(updateSuggestionFromServer, debounceTime);
+      debounceTimerPingServer = setTimeout(() => pingCompletionServerWithRetry(promptText), debounceTime);
+    }
+
+    function updateSuggestionNode() {
+      suggestionElement = document.querySelector('.suggestion');
+      if (suggestionElement) {
+        suggestionElement.innerHTML = convertToHtml(currentSuggestion);
+      }
+      else {
+        insertSuggestionAtCursor(createSuggestionSpan(currentSuggestion));
+      }
+    }
+
+    function pingAndSetSuggestion() {
+      currentContext = getNCharsBeforeCursor(contextLengthChar);
+      pingCompletionServerDebounced(currentContext);
+      updateSuggestionNode();
+    }
+
+    function updateLoadingBars(nSuggested, nDecoded, maxDecoded, maxSuggested, state) {
+      nDecodedBar.style.width = `${(nDecoded / maxDecoded) * 100}%`;
+      nSuggestedBar.style.width = `${(nSuggested / maxSuggested) * 100}%`;
+
+      state = state - 2; // Convert to 0-based index
+
+      const dots = document.querySelectorAll('.dot');
+      dots.forEach((dot, index) => {
+        if (state > index) {
+          dot.classList.add('active');
+        } else {
+          dot.classList.remove('active');
+        }
+      });
     }
 
     function handleEditorChange() {
+      deleteSuggestionSpan();
       clearTimeout(debounceTimerChangeInEditor);
       debounceTimerChangeInEditor = setTimeout(() => {
-        updateSuggestionFromServerDebounced();
+        const context = getNCharsBeforeCursor(contextLengthChar);
+        currentContext = context;
+        pingCompletionServerDebounced(currentContext);
+        updateSuggestionNode();
       }, debounceTime);
     }
 
     function handleEditorKeydown(event) {
       if (event.key === 'Tab') {
         event.preventDefault();
-        const suggestionElement = document.querySelector('.suggestion');
-        if (suggestionElement) {
-          const suggestionText = suggestionElement.textContent;
+        deleteSuggestionSpan();
 
-          if (event.shiftKey) {
-            const match = suggestionText.match(/^\s*\S+/);
-            if (match) {
-              const firstWord = match[0];
-              const restOfSuggestion = suggestionText.slice(firstWord.length);
-              insertTextAtCursor(firstWord);
-              if (restOfSuggestion.trim()) {
-                suggestionElement.textContent = restOfSuggestion.trim();
-              } else {
-                suggestionElement.remove();
-              }
-            }
-          } else {
-            insertTextAtCursor(suggestionText);
-            suggestionElement.remove();
+        if (event.shiftKey) {
+          const match = currentSuggestion.match(/^\s*\S+/);
+          if (match) {
+            const firstWord = match[0];
+            const restOfSuggestion = currentSuggestion.slice(firstWord.length);
+            insertTextAtCursor(firstWord);
+            currentSuggestion = restOfSuggestion;
+            updateSuggestionNode();
           }
-          updateSuggestionFromServer();
+        } else {
+          const suggest = currentSuggestion;
+          currentSuggestion = '';
+          insertTextAtCursor(suggest);
         }
+        currentContext = getNCharsBeforeCursor(contextLengthChar);
+        pingCompletionServerDebounced(currentContext);
       }
-    }
-
-    function highlightText() {
-      const highlightRegex = /'''(.+?)'''/g;
-      const content = chapterContent.innerHTML;
-      const highlightedContent = content.replace(highlightRegex, '<mark class="highlight">$1</mark>');
-      chapterContent.innerHTML = highlightedContent;
+      updateChapter();
     }
 
     addChapterButton.addEventListener('click', createChapter);
     chapterList.addEventListener('click', event => {
       if (event.target.tagName === 'A') {
         selectChapter(parseInt(event.target.dataset.id));
+      } else if (event.target.classList.contains('delete-chapter')) {
+        deleteChapter(parseInt(event.target.dataset.id));
       }
     });
     chapterTitle.addEventListener('input', updateChapter);
-    chapterContent.addEventListener('input', handleEditorChange);
-    chapterContent.addEventListener('click', handleEditorChange);
+    document.addEventListener('input', () => {
+      handleEditorChange();
+      updateChapter(); // Save the chapter when the content changes
+    });
     chapterContent.addEventListener('keydown', handleEditorKeydown);
-    notes.addEventListener('input', saveChapters);
+    // notes.addEventListener('input', saveChapters);
     exportTextButton.addEventListener('click', exportAsText);
     exportPDFButton.addEventListener('click', exportAsPDF);
     resetDataButton.addEventListener('click', resetData);
     exportMenuButton.addEventListener('click', toggleExportMenu);
+
     tabs.forEach(tab => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
     });
 
     loadChapters();
-    setInterval(saveChapters, 5000);
-    setInterval(updateSuggestionFromServerDebounced, 1000);
+    setInterval(saveChapters, 2000);
+    setInterval(pingAndSetSuggestion, 1000);
   </script>
 </body>
 
