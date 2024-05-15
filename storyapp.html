@@ -473,7 +473,7 @@
       }
 
       // Insert the suggestion span after the current selection
-      range.collapse(false);
+      // range.collapse(false);
       range.insertNode(span);
 
       // Restore the original selection
@@ -535,7 +535,7 @@
       // Convert HTML to text, handling line breaks
       textUpToCursor = container.innerHTML
         .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<\/div>/gi, "\n")
+        .replace(/<\/div>/gi, "")
         .replace(/<div>/gi, "")
         .replace(/<[^>]+>/g, ""); // Remove any remaining HTML tags
 
@@ -548,6 +548,10 @@
     }
 
     async function pingCompletionServer(promptText) {
+
+      // log
+      console.log("Prompt text:", promptText);
+
       try {
         const response = await fetch(completionURL, {
           method: "POST",
@@ -567,6 +571,7 @@
             responseData.max_suggested,
             responseData.state
           );
+          console.log("Suggested:", currentSuggestion);
           return true;
         }
       } catch (error) {
